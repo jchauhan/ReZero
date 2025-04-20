@@ -11,6 +11,7 @@ from trl.trainer.grpo_trainer import apply_chat_template
 
 from config import logger
 from src.prompts import build_user_prompt, get_system_prompt
+
 # TODO: refactor this, it's terrible
 from src.search_module import search
 from src.tokenizer_adapter import TokenizerAdapter
@@ -56,7 +57,9 @@ class Agent:
             ]
         }
 
-    def run_agent_generations(self, generate_fn, tokenizer, chat_states: list[dict]) -> list[dict]:
+    def run_agent_generations(
+        self, generate_fn, tokenizer, chat_states: list[dict]
+    ) -> list[dict]:
         """Run generation for chat states requiring assistant responses."""
         logger.debug(f"Starting generation for {len(chat_states)} chat states")
         prompts = []
@@ -84,8 +87,12 @@ class Agent:
                 else:
                     full_response = response
 
-                assistant_response = full_response.split(self.tokenizer_adapter.get_assistant_marker())[-1]
-                chat_state["messages"].append({"role": "assistant", "content": assistant_response})
+                assistant_response = full_response.split(
+                    self.tokenizer_adapter.get_assistant_marker()
+                )[-1]
+                chat_state["messages"].append(
+                    {"role": "assistant", "content": assistant_response}
+                )
                 logger.debug(f"Added assistant response to chat state {idx}")
         else:
             logger.debug("No prompts to generate responses for")
@@ -97,7 +104,9 @@ class Agent:
         for chat_state in chat_states:
             if chat_state.get("finished"):
                 continue
-            assert chat_state["messages"][-1]["role"] == "assistant", "Expected the last role to be assistant"
+            assert chat_state["messages"][-1]["role"] == "assistant", (
+                "Expected the last role to be assistant"
+            )
             assistant_response = chat_state["messages"][-1]["content"]
             if not re.search(r"<search>.*?</search>", assistant_response, re.DOTALL):
                 chat_state["finished"] = True
@@ -124,11 +133,18 @@ class Agent:
                     formatted_results = f"<information>{results}</information>"
                     logger.info(f"ℹ️ Information: {formatted_results}")
 
-                    chat_state["messages"].append({"role": "user", "content": formatted_results})
+                    chat_state["messages"].append(
+                        {"role": "user", "content": formatted_results}
+                    )
                     logger.debug("Added search results to chat state")
             except Exception as e:
                 logger.error(f"Error during tool call: {str(e)}")
-                chat_state["messages"].append({"role": "system", "content": f"Error during post-processing: {str(e)}"})
+                chat_state["messages"].append(
+                    {
+                        "role": "system",
+                        "content": f"Error during post-processing: {str(e)}",
+                    }
+                )
                 chat_state["finished"] = True
 
         return chat_states
@@ -136,9 +152,17 @@ class Agent:
     def get_chat_num_tokens(self, chat_state: dict, tokenizer) -> int:
         """Get number of tokens in chat state."""
         chat_text = apply_chat_template(chat_state, tokenizer=tokenizer)["text"]
-        return tokenizer(chat_text, add_special_tokens=False, return_tensors="pt")["input_ids"].squeeze().shape[0]
+        return (
+            tokenizer(chat_text, add_special_tokens=False, return_tensors="pt")[
+                "input_ids"
+            ]
+            .squeeze()
+            .shape[0]
+        )
 
-    def check_exceeded_max_new_tokens(self, chat_states: list[dict], max_new_tokens: int, tokenizer) -> list[dict]:
+    def check_exceeded_max_new_tokens(
+        self, chat_states: list[dict], max_new_tokens: int, tokenizer
+    ) -> list[dict]:
         """Check if any chat state has exceeded max new tokens."""
         for chat_state in chat_states:
             if chat_state.get("finished"):
@@ -176,21 +200,40 @@ class Agent:
 
         # Set initial token lengths for each chat state
         for chat_state in chat_states:
-            chat_state["initial_length"] = self.get_chat_num_tokens(chat_state, tokenizer)
+            chat_state["initial_length"] = self.get_chat_num_tokens(
+                chat_state, tokenizer
+            )
 
         # Step 2: Run agent loop
         for i in range(max_generations):
-            chat_states = self.run_agent_generations(generate_fn, tokenizer, chat_states)
+            chat_states = self.run_agent_generations(
+                generate_fn, tokenizer, chat_states
+            )
+            print("--------------------run_agent_generations ------------------")
+            print(chat_states)
             chat_states = self.check_finished_chats(chat_states)
+            print("--------------------check_finished_chats ------------------")
+            print(chat_states)
             chat_states = self.run_tool_calls(chat_states)
-            chat_states = self.check_exceeded_max_new_tokens(chat_states, max_new_tokens, tokenizer)
+            print("--------------------run_tool_calls ------------------")
+            print(chat_states)
+            chat_states = self.check_exceeded_max_new_tokens(
+                chat_states, max_new_tokens, tokenizer
+            )
+            print(
+                "--------------------check_exceeded_max_new_tokens ------------------"
+            )
+            print(chat_states)
 
         # Step 3: Process final outputs
         # Get the final answers from each chat state
         answers = [chat["messages"][-1]["content"] for chat in chat_states]
 
         # Convert chat states to text format for tokenization
-        str_chats = [apply_chat_template(chat, tokenizer=tokenizer)["text"] for chat in chat_states]
+        str_chats = [
+            apply_chat_template(chat, tokenizer=tokenizer)["text"]
+            for chat in chat_states
+        ]
         prompt_toks, response_toks, response_masks = [], [], []
 
         # Process each chat state to get tokens and masks
@@ -198,18 +241,22 @@ class Agent:
             try:
                 # Split into prompt and response parts
                 # Note: If assistant marker is missing, split_prompt_assistant will return (full_text, "")
-                prompt_text, response_text = self.tokenizer_adapter.split_prompt_assistant(str_chat)
+                prompt_text, response_text = (
+                    self.tokenizer_adapter.split_prompt_assistant(str_chat)
+                )
 
                 # Get prompt tokens
                 prompt_toks.append(
-                    tokenizer(prompt_text, add_special_tokens=False, return_tensors="pt")["input_ids"].squeeze()
+                    tokenizer(
+                        prompt_text, add_special_tokens=False, return_tensors="pt"
+                    )["input_ids"].squeeze()
                 )
 
                 # Get response tokens (truncated to max_new_tokens)
                 response_toks.append(
-                    tokenizer(response_text, add_special_tokens=False, return_tensors="pt")["input_ids"].squeeze()[
-                        :max_new_tokens
-                    ]
+                    tokenizer(
+                        response_text, add_special_tokens=False, return_tensors="pt"
+                    )["input_ids"].squeeze()[:max_new_tokens]
                 )
 
                 # Get full mask and slice it properly

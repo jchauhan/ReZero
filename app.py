@@ -75,7 +75,9 @@ def setup_model_and_tokenizer(model_path: str):
         tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
     except Exception as e:
         logger.warning(f"Failed to load from local path: {e}")
-        logger.info(f"Attempting to load directly from Hugging Face: {GENERATOR_MODEL_REPO_ID}")
+        logger.info(
+            f"Attempting to load directly from Hugging Face: {GENERATOR_MODEL_REPO_ID}"
+        )
 
         # Fallback to the Hugging Face model repository
         model = AutoModelForCausalLM.from_pretrained(
@@ -84,8 +86,10 @@ def setup_model_and_tokenizer(model_path: str):
             device_map="auto",
             trust_remote_code=True,
         )
-        tokenizer = AutoTokenizer.from_pretrained(GENERATOR_MODEL_REPO_ID, trust_remote_code=True)
-        logger.info(f"Successfully loaded model from Hugging Face repo")
+        tokenizer = AutoTokenizer.from_pretrained(
+            GENERATOR_MODEL_REPO_ID, trust_remote_code=True
+        )
+        logger.info("Successfully loaded model from Hugging Face repo")
 
     # Defaulting to the one used in inference.py, adjust if needed for your specific model
     assistant_marker = "<|start_header_id|>assistant<|end_header_id|>"
@@ -111,7 +115,9 @@ def get_sampling_params(temperature: float = 0.7, max_tokens: int = 4096):
 _tokenizer_for_template_global = None  # Placeholder
 
 
-def get_chat_num_tokens(current_chat_state: dict, tokenizer: PreTrainedTokenizer) -> int:
+def get_chat_num_tokens(
+    current_chat_state: dict, tokenizer: PreTrainedTokenizer
+) -> int:
     """Helper to get number of tokens in chat state."""
     try:
         chat_text = apply_chat_template(current_chat_state, tokenizer=tokenizer)["text"]
@@ -123,7 +129,9 @@ def get_chat_num_tokens(current_chat_state: dict, tokenizer: PreTrainedTokenizer
         return sys.maxsize
 
 
-def create_deepsearch_tab(model, tokenizer, assistant_marker, system_prompt, temperature):
+def create_deepsearch_tab(
+    model, tokenizer, assistant_marker, system_prompt, temperature
+):
     """Creates the UI components and logic for the ReZero (Vector DB) tab."""
     logger.info("Creating ReZero Tab")
     # tokenizer_for_template = cast(PreTrainedTokenizer, tokenizer) # Global now
@@ -165,13 +173,19 @@ def create_deepsearch_tab(model, tokenizer, assistant_marker, system_prompt, tem
             role = getattr(msg_obj, "role", "unknown")
             content = getattr(msg_obj, "content", "")
             if role == "user":
-                chat_state["messages"].append({"role": "user", "content": build_user_prompt(content)})
+                chat_state["messages"].append(
+                    {"role": "user", "content": build_user_prompt(content)}
+                )
             elif role == "assistant":
                 chat_state["messages"].append({"role": "assistant", "content": content})
 
-        chat_state["messages"].append({"role": "user", "content": build_user_prompt(message)})
+        chat_state["messages"].append(
+            {"role": "user", "content": build_user_prompt(message)}
+        )
 
-        initial_token_length = get_chat_num_tokens(chat_state, local_tokenizer_for_template)  # Pass tokenizer
+        initial_token_length = get_chat_num_tokens(
+            chat_state, local_tokenizer_for_template
+        )  # Pass tokenizer
         max_new_tokens_allowed = get_sampling_params(temp)["max_new_tokens"]
 
         messages = history_gr
@@ -181,6 +195,7 @@ def create_deepsearch_tab(model, tokenizer, assistant_marker, system_prompt, tem
         last_assistant_response = ""
 
         while not chat_state.get("finished", False) and iterations < max_iter:
+            print(chat_state)
             iterations += 1
             current_turn_start_time = time.time()
 
@@ -194,8 +209,13 @@ def create_deepsearch_tab(model, tokenizer, assistant_marker, system_prompt, tem
             )
             yield messages
 
-            current_length_before_gen = get_chat_num_tokens(chat_state, local_tokenizer_for_template)  # Pass tokenizer
-            if current_length_before_gen - initial_token_length > max_new_tokens_allowed:
+            current_length_before_gen = get_chat_num_tokens(
+                chat_state, local_tokenizer_for_template
+            )  # Pass tokenizer
+            if (
+                current_length_before_gen - initial_token_length
+                > max_new_tokens_allowed
+            ):
                 logger.warning(
                     f"TOKEN LIMIT EXCEEDED (Before Generation): Current {current_length_before_gen}, Start {initial_token_length}"
                 )
@@ -210,16 +230,22 @@ def create_deepsearch_tab(model, tokenizer, assistant_marker, system_prompt, tem
 
             try:
                 generation_params = get_sampling_params(temp)
-                formatted_prompt = apply_chat_template(chat_state, tokenizer=local_tokenizer_for_template)[
-                    "text"
-                ]  # Use local typed tokenizer
-                inputs = tokenizer(formatted_prompt, return_tensors="pt", add_special_tokens=False).to(model.device)
+                formatted_prompt = apply_chat_template(
+                    chat_state, tokenizer=local_tokenizer_for_template
+                )["text"]  # Use local typed tokenizer
+                inputs = tokenizer(
+                    formatted_prompt, return_tensors="pt", add_special_tokens=False
+                ).to(model.device)
 
                 outputs = model.generate(**inputs, **generation_params)
-                full_response_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+                full_response_text = tokenizer.decode(
+                    outputs[0], skip_special_tokens=True
+                )
 
                 if assistant_marker in full_response_text:
-                    assistant_response = full_response_text.split(assistant_marker)[-1].strip()
+                    assistant_response = full_response_text.split(assistant_marker)[
+                        -1
+                    ].strip()
                 else:
                     inputs_dict = cast(dict, inputs)
                     input_token_length = len(inputs_dict["input_ids"][0])
@@ -235,11 +261,17 @@ def create_deepsearch_tab(model, tokenizer, assistant_marker, system_prompt, tem
 
                 gen_time = time.time() - current_turn_start_time
 
-                display_thinking = thinking_content if thinking_content else "Processing..."
+                display_thinking = (
+                    thinking_content if thinking_content else "Processing..."
+                )
                 messages[think_msg_idx] = gr.ChatMessage(
                     role="assistant",
                     content=display_thinking,
-                    metadata={"title": "🧠 Thinking", "status": "done", "duration": gen_time},
+                    metadata={
+                        "title": "🧠 Thinking",
+                        "status": "done",
+                        "duration": gen_time,
+                    },
                 )
                 yield messages
 
@@ -254,7 +286,9 @@ def create_deepsearch_tab(model, tokenizer, assistant_marker, system_prompt, tem
                 yield messages
                 break
 
-            chat_state["messages"].append({"role": "assistant", "content": assistant_response})
+            chat_state["messages"].append(
+                {"role": "assistant", "content": assistant_response}
+            )
 
             search_query = extract_search_query(assistant_response)
 
@@ -272,13 +306,18 @@ def create_deepsearch_tab(model, tokenizer, assistant_marker, system_prompt, tem
                 yield messages
                 search_start = time.time()
                 try:
-                    results = search(search_query, return_type=str, results=num_search_results)
+                    results = search(
+                        search_query, return_type=str, results=num_search_results
+                    )
                     search_duration = time.time() - search_start
 
                     messages[search_msg_idx] = gr.ChatMessage(
                         role="assistant",
                         content=f"{search_query}",
-                        metadata={"title": "🔍 ReZero Query", "duration": search_duration},
+                        metadata={
+                            "title": "🔍 ReZero Query",
+                            "duration": search_duration,
+                        },
                     )
                     yield messages
                     display_results = format_search_results(results)
@@ -292,7 +331,9 @@ def create_deepsearch_tab(model, tokenizer, assistant_marker, system_prompt, tem
                     yield messages
 
                     formatted_results = f"<information>{results}</information>"
-                    chat_state["messages"].append({"role": "user", "content": formatted_results})
+                    chat_state["messages"].append(
+                        {"role": "user", "content": formatted_results}
+                    )
 
                 except Exception as e:
                     search_duration = time.time() - search_start
@@ -300,14 +341,25 @@ def create_deepsearch_tab(model, tokenizer, assistant_marker, system_prompt, tem
                     messages[search_msg_idx] = gr.ChatMessage(
                         role="assistant",
                         content=f"Search failed: {str(e)}",
-                        metadata={"title": "❌ Search Error", "status": "done", "duration": search_duration},
+                        metadata={
+                            "title": "❌ Search Error",
+                            "status": "done",
+                            "duration": search_duration,
+                        },
                     )
                     yield messages
-                    chat_state["messages"].append({"role": "system", "content": f"Error during search: {str(e)}"})
+                    chat_state["messages"].append(
+                        {"role": "system", "content": f"Error during search: {str(e)}"}
+                    )
                     chat_state["finished"] = True
 
-            current_length_after_iter = get_chat_num_tokens(chat_state, local_tokenizer_for_template)  # Pass tokenizer
-            if current_length_after_iter - initial_token_length > max_new_tokens_allowed:
+            current_length_after_iter = get_chat_num_tokens(
+                chat_state, local_tokenizer_for_template
+            )  # Pass tokenizer
+            if (
+                current_length_after_iter - initial_token_length
+                > max_new_tokens_allowed
+            ):
                 logger.warning(
                     f"TOKEN LIMIT EXCEEDED (After Iteration): Current {current_length_after_iter}, Start {initial_token_length}"
                 )
@@ -330,7 +382,11 @@ def create_deepsearch_tab(model, tokenizer, assistant_marker, system_prompt, tem
                 gr.ChatMessage(
                     role="assistant",
                     content=f"Reached maximum iterations ({max_iter}). Displaying last response:\n\n{last_assistant_response}",
-                    metadata={"title": "⚠️ Max Iterations", "status": "done", "duration": total_time},
+                    metadata={
+                        "title": "⚠️ Max Iterations",
+                        "status": "done",
+                        "duration": total_time,
+                    },
                 )
             )
             yield messages
@@ -384,7 +440,9 @@ def create_deepsearch_tab(model, tokenizer, assistant_marker, system_prompt, tem
 
     # --- UI Layout for ReZero Tab ---
     with gr.Blocks(analytics_enabled=False) as deepsearch_tab:
-        gr.Markdown("# 🧠 ReZero: Enhancing LLM search ability by trying  one-more-time")
+        gr.Markdown(
+            "# 🧠 ReZero: Enhancing LLM search ability by trying  one-more-time"
+        )
         gr.Markdown("Ask questions answered using the local vector database.")
 
         with gr.Row():
@@ -399,7 +457,10 @@ def create_deepsearch_tab(model, tokenizer, assistant_marker, system_prompt, tem
                     bubble_full_width=False,
                 )
                 msg = gr.Textbox(
-                    placeholder="Type your message here...", show_label=False, container=False, elem_id="msg-input"
+                    placeholder="Type your message here...",
+                    show_label=False,
+                    container=False,
+                    elem_id="msg-input",
                 )
 
                 gr.Examples(
@@ -415,9 +476,18 @@ def create_deepsearch_tab(model, tokenizer, assistant_marker, system_prompt, tem
 
             with gr.Column(scale=1):
                 gr.Markdown("### Settings")
-                temp_slider = gr.Slider(minimum=0.1, maximum=1.0, value=temperature, step=0.1, label="Temperature")
+                temp_slider = gr.Slider(
+                    minimum=0.1,
+                    maximum=1.0,
+                    value=temperature,
+                    step=0.1,
+                    label="Temperature",
+                )
                 system_prompt_input = gr.Textbox(
-                    label="System Prompt", value=system_prompt, lines=3, info="Controls how the AI behaves"
+                    label="System Prompt",
+                    value=system_prompt,
+                    lines=3,
+                    info="Controls how the AI behaves",
                 )
                 max_iter_slider = gr.Slider(
                     minimum=1,
@@ -437,10 +507,14 @@ def create_deepsearch_tab(model, tokenizer, assistant_marker, system_prompt, tem
                 )
 
         # --- Event Handlers for ReZero Tab ---
-        def add_user_message(user_msg_text: str, history: list[gr.ChatMessage]) -> tuple[str, list[gr.ChatMessage]]:
+        def add_user_message(
+            user_msg_text: str, history: list[gr.ChatMessage]
+        ) -> tuple[str, list[gr.ChatMessage]]:
             """Appends user message to chat history and clears input."""
             if user_msg_text and user_msg_text.strip():
-                history.append(gr.ChatMessage(role="user", content=user_msg_text.strip()))
+                history.append(
+                    gr.ChatMessage(role="user", content=user_msg_text.strip())
+                )
             return "", history
 
         submitted_msg_state = gr.State("")
@@ -448,7 +522,9 @@ def create_deepsearch_tab(model, tokenizer, assistant_marker, system_prompt, tem
 
         def check_if_example_and_store_answer(msg_text):
             gold_answer = qa_map.get(msg_text)
-            logger.info(f"Checking for gold answer for: '{msg_text[:50]}...'. Found: {bool(gold_answer)}")
+            logger.info(
+                f"Checking for gold answer for: '{msg_text[:50]}...'. Found: {bool(gold_answer)}"
+            )
             return gold_answer
 
         submit.click(
@@ -468,7 +544,14 @@ def create_deepsearch_tab(model, tokenizer, assistant_marker, system_prompt, tem
             queue=False,
         ).then(
             stream_agent_response,  # References the function defined within this scope
-            inputs=[submitted_msg_state, chatbot, temp_slider, max_iter_slider, num_results_slider, gold_answer_state],
+            inputs=[
+                submitted_msg_state,
+                chatbot,
+                temp_slider,
+                max_iter_slider,
+                num_results_slider,
+                gold_answer_state,
+            ],
             outputs=chatbot,
         )
 
@@ -489,14 +572,25 @@ def create_deepsearch_tab(model, tokenizer, assistant_marker, system_prompt, tem
             queue=False,
         ).then(
             stream_agent_response,  # References the function defined within this scope
-            inputs=[submitted_msg_state, chatbot, temp_slider, max_iter_slider, num_results_slider, gold_answer_state],
+            inputs=[
+                submitted_msg_state,
+                chatbot,
+                temp_slider,
+                max_iter_slider,
+                num_results_slider,
+                gold_answer_state,
+            ],
             outputs=chatbot,
         )
 
         clear.click(lambda: ([], None), None, [chatbot, gold_answer_state])
 
         system_prompt_state = gr.State(system_prompt)
-        system_prompt_input.change(lambda prompt: prompt, inputs=[system_prompt_input], outputs=[system_prompt_state])
+        system_prompt_input.change(
+            lambda prompt: prompt,
+            inputs=[system_prompt_input],
+            outputs=[system_prompt_state],
+        )
 
     return deepsearch_tab
 
@@ -512,7 +606,9 @@ def create_tavily_tab(model, tokenizer, assistant_marker, system_prompt, tempera
         logger.error("TAVILY_API_KEY not found in environment variables.")
         with gr.Blocks(analytics_enabled=False) as tavily_tab_error:
             gr.Markdown("# ⚠️ Tavily Search Error")
-            gr.Markdown("TAVILY_API_KEY environment variable not set. Please set it and restart the application.")
+            gr.Markdown(
+                "TAVILY_API_KEY environment variable not set. Please set it and restart the application."
+            )
         return tavily_tab_error
 
     try:
@@ -546,13 +642,19 @@ def create_tavily_tab(model, tokenizer, assistant_marker, system_prompt, tempera
             role = getattr(msg_obj, "role", "unknown")
             content = getattr(msg_obj, "content", "")
             if role == "user":
-                chat_state["messages"].append({"role": "user", "content": build_user_prompt(content)})
+                chat_state["messages"].append(
+                    {"role": "user", "content": build_user_prompt(content)}
+                )
             elif role == "assistant":
                 chat_state["messages"].append({"role": "assistant", "content": content})
 
-        chat_state["messages"].append({"role": "user", "content": build_user_prompt(message)})
+        chat_state["messages"].append(
+            {"role": "user", "content": build_user_prompt(message)}
+        )
 
-        initial_token_length = get_chat_num_tokens(chat_state, local_tokenizer_for_template)
+        initial_token_length = get_chat_num_tokens(
+            chat_state, local_tokenizer_for_template
+        )
         max_new_tokens_allowed = get_sampling_params(temp)["max_new_tokens"]
 
         messages = history_gr
@@ -575,8 +677,13 @@ def create_tavily_tab(model, tokenizer, assistant_marker, system_prompt, tempera
             )
             yield messages
 
-            current_length_before_gen = get_chat_num_tokens(chat_state, local_tokenizer_for_template)
-            if current_length_before_gen - initial_token_length > max_new_tokens_allowed:
+            current_length_before_gen = get_chat_num_tokens(
+                chat_state, local_tokenizer_for_template
+            )
+            if (
+                current_length_before_gen - initial_token_length
+                > max_new_tokens_allowed
+            ):
                 logger.warning(
                     f"TOKEN LIMIT EXCEEDED (Before Generation): Current {current_length_before_gen}, Start {initial_token_length}"
                 )
@@ -591,14 +698,22 @@ def create_tavily_tab(model, tokenizer, assistant_marker, system_prompt, tempera
 
             try:
                 generation_params = get_sampling_params(temp)
-                formatted_prompt = apply_chat_template(chat_state, tokenizer=local_tokenizer_for_template)["text"]
-                inputs = tokenizer(formatted_prompt, return_tensors="pt", add_special_tokens=False).to(model.device)
+                formatted_prompt = apply_chat_template(
+                    chat_state, tokenizer=local_tokenizer_for_template
+                )["text"]
+                inputs = tokenizer(
+                    formatted_prompt, return_tensors="pt", add_special_tokens=False
+                ).to(model.device)
 
                 outputs = model.generate(**inputs, **generation_params)
-                full_response_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+                full_response_text = tokenizer.decode(
+                    outputs[0], skip_special_tokens=True
+                )
 
                 if assistant_marker in full_response_text:
-                    assistant_response = full_response_text.split(assistant_marker)[-1].strip()
+                    assistant_response = full_response_text.split(assistant_marker)[
+                        -1
+                    ].strip()
                 else:
                     inputs_dict = cast(dict, inputs)
                     input_token_length = len(inputs_dict["input_ids"][0])
@@ -614,11 +729,17 @@ def create_tavily_tab(model, tokenizer, assistant_marker, system_prompt, tempera
 
                 gen_time = time.time() - current_turn_start_time
 
-                display_thinking = thinking_content if thinking_content else "Processing..."
+                display_thinking = (
+                    thinking_content if thinking_content else "Processing..."
+                )
                 messages[think_msg_idx] = gr.ChatMessage(
                     role="assistant",
                     content=display_thinking,
-                    metadata={"title": "🧠 Thinking", "status": "done", "duration": gen_time},
+                    metadata={
+                        "title": "🧠 Thinking",
+                        "status": "done",
+                        "duration": gen_time,
+                    },
                 )
                 yield messages
 
@@ -633,7 +754,9 @@ def create_tavily_tab(model, tokenizer, assistant_marker, system_prompt, tempera
                 yield messages
                 break
 
-            chat_state["messages"].append({"role": "assistant", "content": assistant_response})
+            chat_state["messages"].append(
+                {"role": "assistant", "content": assistant_response}
+            )
 
             search_query = extract_search_query(assistant_response)
 
@@ -679,7 +802,10 @@ def create_tavily_tab(model, tokenizer, assistant_marker, system_prompt, tempera
                     messages[search_msg_idx] = gr.ChatMessage(
                         role="assistant",
                         content=f"{search_query}",
-                        metadata={"title": "🔍 ReZero Query", "duration": search_duration},
+                        metadata={
+                            "title": "🔍 ReZero Query",
+                            "duration": search_duration,
+                        },
                     )
                     yield messages
 
@@ -688,13 +814,20 @@ def create_tavily_tab(model, tokenizer, assistant_marker, system_prompt, tempera
                         gr.ChatMessage(
                             role="assistant",
                             content=display_results,
-                            metadata={"title": "ℹ️ Tavily Information", "status": "done"},
+                            metadata={
+                                "title": "ℹ️ Tavily Information",
+                                "status": "done",
+                            },
                         )
                     )
                     yield messages
 
-                    formatted_results_for_llm = f"<information>{formatted_tavily_results}</information>"
-                    chat_state["messages"].append({"role": "user", "content": formatted_results_for_llm})
+                    formatted_results_for_llm = (
+                        f"<information>{formatted_tavily_results}</information>"
+                    )
+                    chat_state["messages"].append(
+                        {"role": "user", "content": formatted_results_for_llm}
+                    )
 
                 except Exception as e:
                     search_duration = time.time() - search_start
@@ -702,16 +835,28 @@ def create_tavily_tab(model, tokenizer, assistant_marker, system_prompt, tempera
                     messages[search_msg_idx] = gr.ChatMessage(
                         role="assistant",
                         content=f"Tavily Search failed: {str(e)}",
-                        metadata={"title": "❌ Tavily Search Error", "status": "done", "duration": search_duration},
+                        metadata={
+                            "title": "❌ Tavily Search Error",
+                            "status": "done",
+                            "duration": search_duration,
+                        },
                     )
                     yield messages
                     chat_state["messages"].append(
-                        {"role": "system", "content": f"Error during Tavily search: {str(e)}"}
+                        {
+                            "role": "system",
+                            "content": f"Error during Tavily search: {str(e)}",
+                        }
                     )
                     chat_state["finished"] = True
 
-            current_length_after_iter = get_chat_num_tokens(chat_state, local_tokenizer_for_template)
-            if current_length_after_iter - initial_token_length > max_new_tokens_allowed:
+            current_length_after_iter = get_chat_num_tokens(
+                chat_state, local_tokenizer_for_template
+            )
+            if (
+                current_length_after_iter - initial_token_length
+                > max_new_tokens_allowed
+            ):
                 logger.warning(
                     f"TOKEN LIMIT EXCEEDED (After Iteration): Current {current_length_after_iter}, Start {initial_token_length}"
                 )
@@ -734,7 +879,11 @@ def create_tavily_tab(model, tokenizer, assistant_marker, system_prompt, tempera
                 gr.ChatMessage(
                     role="assistant",
                     content=f"Reached maximum iterations ({max_iter}). Displaying last response:\n\n{last_assistant_response}",
-                    metadata={"title": "⚠️ Max Iterations", "status": "done", "duration": total_time},
+                    metadata={
+                        "title": "⚠️ Max Iterations",
+                        "status": "done",
+                        "duration": total_time,
+                    },
                 )
             )
             yield messages
@@ -813,10 +962,17 @@ def create_tavily_tab(model, tokenizer, assistant_marker, system_prompt, tempera
             with gr.Column(scale=1):
                 gr.Markdown("### Settings")
                 tavily_temp_slider = gr.Slider(
-                    minimum=0.1, maximum=1.0, value=temperature, step=0.1, label="Temperature"
+                    minimum=0.1,
+                    maximum=1.0,
+                    value=temperature,
+                    step=0.1,
+                    label="Temperature",
                 )
                 tavily_system_prompt_input = gr.Textbox(
-                    label="System Prompt", value=system_prompt, lines=3, info="Controls how the AI behaves"
+                    label="System Prompt",
+                    value=system_prompt,
+                    lines=3,
+                    info="Controls how the AI behaves",
                 )
                 tavily_max_iter_slider = gr.Slider(
                     minimum=1,
@@ -840,7 +996,9 @@ def create_tavily_tab(model, tokenizer, assistant_marker, system_prompt, tempera
             user_msg_text: str, history: list[gr.ChatMessage]
         ) -> tuple[str, list[gr.ChatMessage]]:
             if user_msg_text and user_msg_text.strip():
-                history.append(gr.ChatMessage(role="user", content=user_msg_text.strip()))
+                history.append(
+                    gr.ChatMessage(role="user", content=user_msg_text.strip())
+                )
             return "", history
 
         tavily_submitted_msg_state = gr.State("")
@@ -889,11 +1047,15 @@ def create_tavily_tab(model, tokenizer, assistant_marker, system_prompt, tempera
             outputs=tavily_chatbot,
         )
 
-        tavily_clear.click(lambda: ([], ""), None, [tavily_chatbot, tavily_submitted_msg_state])
+        tavily_clear.click(
+            lambda: ([], ""), None, [tavily_chatbot, tavily_submitted_msg_state]
+        )
 
         tavily_system_prompt_state = gr.State(system_prompt)
         tavily_system_prompt_input.change(
-            lambda prompt: prompt, inputs=[tavily_system_prompt_input], outputs=[tavily_system_prompt_state]
+            lambda prompt: prompt,
+            inputs=[tavily_system_prompt_input],
+            outputs=[tavily_system_prompt_state],
         )
 
     return tavily_tab
@@ -912,7 +1074,9 @@ def main():
         # Display error if model fails to load
         with gr.Blocks() as demo:
             gr.Markdown("# Critical Error")
-            gr.Markdown(f"Failed to load both local model and Hugging Face model. Error: {e}")
+            gr.Markdown(
+                f"Failed to load both local model and Hugging Face model. Error: {e}"
+            )
             demo.launch(share=True)
         sys.exit(1)  # Exit if model loading fails
 
@@ -924,12 +1088,18 @@ def main():
     _tokenizer_for_template_global = cast(PreTrainedTokenizer, tokenizer)
 
     # Create content for each tab
-    tab1 = create_deepsearch_tab(model, tokenizer, assistant_marker, system_prompt, default_temp)
-    tab2 = create_tavily_tab(model, tokenizer, assistant_marker, system_prompt, default_temp)
+    tab1 = create_deepsearch_tab(
+        model, tokenizer, assistant_marker, system_prompt, default_temp
+    )
+    tab2 = create_tavily_tab(
+        model, tokenizer, assistant_marker, system_prompt, default_temp
+    )
 
     # Combine tabs
     interface = gr.TabbedInterface(
-        [tab1, tab2], tab_names=["ReZero (VectorDB)", "Tavily Search (Web)"], title="ReZero Demo"
+        [tab1, tab2],
+        tab_names=["ReZero (VectorDB)", "Tavily Search (Web)"],
+        title="ReZero Demo",
     )
 
     logger.info("Launching Gradio Tabbed Interface...")
@@ -938,6 +1108,8 @@ def main():
 
 if __name__ == "__main__":
     if load_vectorstore() is None:
-        logger.warning("⚠️ FAISS vectorstore could not be loaded. Search functionality may be unavailable.")
+        logger.warning(
+            "⚠️ FAISS vectorstore could not be loaded. Search functionality may be unavailable."
+        )
 
     main()
