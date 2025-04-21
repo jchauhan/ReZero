@@ -153,6 +153,29 @@ class QAPipeline:
 
 
 if __name__ == "__main__":
-    QAPipeline(provider=UnslothProvider()).run(
-        "./data/mission_report.md", num_questions=2
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Run QA pipeline with optional parameters."
+    )
+    parser.add_argument(
+        "--model_name",
+        type=str,
+        default="meta-llama/meta-Llama-3.1-8B-Instruct",
+        help="Model name to use",
+    )
+    parser.add_argument(
+        "--data_file",
+        type=str,
+        default="./data/mission_report.md",
+        help="Path to the data file",
+    )
+    parser.add_argument(
+        "--num_questions", type=int, default=2, help="Number of questions to generate"
+    )
+
+    args = parser.parse_args()
+
+    QAPipeline(provider=UnslothProvider(model_name=args.model_name)).run(
+        args.data_file, num_questions=args.num_questions
     )
