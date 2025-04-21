@@ -46,6 +46,7 @@ class QAExtractor:
                 f"Text:\n{content}\n"
             )
             prompts.append(prompt)
+            print(prompt)
             ids.append(i + 1)
             contents.append(content)
         return prompts, ids, contents
