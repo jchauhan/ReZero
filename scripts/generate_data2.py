@@ -53,6 +53,7 @@ class QAExtractor:
     def _parse_outputs(self, outputs, ids, contents):
         final_questions = []
         for idx, output in enumerate(outputs):
+            print(output)
             parsed = self._parse_qa_output(output)
             if not parsed:
                 logger.warning("Falling back to imperfect parser.")
