@@ -52,7 +52,7 @@ class QAPipeline:
         )
 
     def _add_paraphrased_to_index(self, chunks, vectorstore):
-        logger.info("Generating paraphrases...")
+        logger.info(f"Generating paraphrases. No of Chunks {len(chunks)}")
         all_versions = []
         for i, chunk in enumerate(chunks):
             for paragraph in [
@@ -117,6 +117,7 @@ class QAPipeline:
         outputs = self.provider.batch_generate(prompts, max_tokens=1024)
         final_questions = []
         for idx, output in enumerate(outputs):
+            print(output)
             for block in re.split(r"\n\s*\n", output.strip()):
                 lines = [l.strip() for l in block.splitlines() if l.strip()]
                 if len(lines) == 3:
@@ -156,6 +157,9 @@ class QAPipeline:
 if __name__ == "__main__":
     import argparse
 
+    from src.providers.ollama import OllamaProvider
+    from src.providers.openai import OpenAIProvider
+
     parser = argparse.ArgumentParser(
         description="Run QA pipeline with optional parameters."
     )
@@ -189,6 +193,12 @@ if __name__ == "__main__":
         default=True,
         help="Whether to load model in 8-bit (only applies to hf provider)",
     )
+    parser.add_argument(
+        "--ollama_concurrency",
+        type=int,
+        default=5,
+        help="Number of concurrent requests for Ollama batch processing",
+    )
 
     args = parser.parse_args()
 
@@ -215,7 +225,10 @@ if __name__ == "__main__":
         provider = OpenAIProvider(model_name=model_name)
 
     elif args.provider == "ollama":
-        provider = OllamaProvider(model_name=model_name)
+        provider = OllamaProvider(
+            model_name=model_name,
+            concurrent_batch_size=args.ollama_concurrency,
+        )
 
     elif args.provider == "hf":
         try:
