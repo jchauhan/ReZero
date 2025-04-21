@@ -7,11 +7,151 @@ from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import UnstructuredMarkdownLoader
 from langchain_community.vectorstores import FAISS
+from loguru import logger
 
 from config import DATA_DIR, logger
 from src.embeddings import CustomHuggingFaceEmbeddings
 from src.providers.ollama import OllamaProvider
 from src.providers.openai import OpenAIProvider
+
+
+class QAExtractor:
+    def __init__(self, provider):
+        self.provider = provider
+
+    def generate_qa(self, chunks, num_questions=2):
+        prompts, ids, contents = self._generate_qa_prompts(chunks, num_questions)
+        outputs = self.provider.batch_generate(prompts, max_tokens=1024)
+        questions = self._parse_outputs(outputs, ids, contents)
+        logger.info(f"Generated {len(questions)} valid QA pairs")
+        return questions
+
+    def _generate_qa_prompts(self, chunks, num_questions):
+        prompts, ids, contents = [], [], []
+        for i, chunk in enumerate(chunks):
+            content = chunk.page_content
+            prompt = (
+                f"You are a question generator. Generate {num_questions} questions based on the following text.\n"
+                "Rules:\n"
+                "1. Questions must be answerable using ONLY the information in the text\n"
+                "2. Answers must be directly stated in the text\n"
+                "3. Each question should test understanding of a different aspect of the text\n"
+                "4. Questions should be clear and specific\n"
+                "5. Answers should be concise and factual\n\n"
+                "For each QA pair, output exactly three lines with no extra commentary:\n"
+                "Line 1: Question: <your question>\n"
+                "Line 2: Answer: <the answer>\n"
+                "Line 3: Difficulty: <easy, medium, or hard>\n"
+                "Do not include any additional text.\n\n"
+                f"Text:\n{content}\n"
+            )
+            prompts.append(prompt)
+            ids.append(i + 1)
+            contents.append(content)
+        return prompts, ids, contents
+
+    def _parse_outputs(self, outputs, ids, contents):
+        final_questions = []
+        for idx, output in enumerate(outputs):
+            parsed = self._parse_qa_output(output)
+            if not parsed:
+                logger.warning("Falling back to imperfect parser.")
+                parsed = self._parse_imperfect_qa_output(output)
+
+            for qa in parsed:
+                if qa["answer"].lower() in contents[idx].lower():
+                    final_questions.append(
+                        {
+                            "id": str(ids[idx]),
+                            "question": qa["question"],
+                            "answer": qa["answer"],
+                            "supporting_paragraphs": [
+                                p.strip()
+                                for p in contents[idx].split("\n\n")
+                                if p.strip()
+                            ],
+                        }
+                    )
+        return final_questions
+
+    def _parse_qa_output(self, text):
+        qa_blocks = []
+        for block in re.split(r"\n\s*\n", text.strip()):
+            qa = self._parse_single_qa_block(block)
+            if qa:
+                q, a, d = qa
+                qa_blocks.append({"question": q, "answer": a, "difficulty": d})
+        return qa_blocks
+
+    def _parse_single_qa_block(self, block):
+        lines = [l.strip() for l in block.splitlines() if l.strip()]
+        if len(lines) != 3:
+            return None
+        try:
+            q = lines[0].split("Question:", 1)[-1].strip()
+            a = lines[1].split("Answer:", 1)[-1].strip()
+            d = lines[2].split("Difficulty:", 1)[-1].strip()
+            return q, a, d
+        except Exception:
+            return None
+
+    def _parse_imperfect_qa_output(self, text):
+        lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
+        qa_blocks = []
+        buffer = []
+
+        for line in lines:
+            label = line.lower()
+            if any(
+                x in label for x in ["question", "answer", "difficulty"]
+            ) or re.match(r"^\d+\.", line):
+                buffer.append(line)
+            else:
+                if buffer:
+                    buffer[-1] += " " + line
+                else:
+                    buffer.append(line)
+
+            if len(buffer) == 3:
+                qa = self._extract_qa_fallback(buffer)
+                if qa:
+                    qa_blocks.append(qa)
+                buffer = []
+
+        if len(buffer) == 3:
+            qa = self._extract_qa_fallback(buffer)
+            if qa:
+                qa_blocks.append(qa)
+
+        return qa_blocks
+
+    def _extract_qa_fallback(self, lines):
+        q, a, d = None, None, None
+        try:
+            for line in lines:
+                lower = line.lower()
+                if "question" in lower:
+                    q = line.split(":", 1)[-1].strip()
+                elif re.match(r"^\d+\.", line):
+                    q = line.split(".", 1)[-1].strip()
+                elif "answer" in lower:
+                    a = line.split(":", 1)[-1].strip()
+                elif "difficulty" in lower:
+                    d = line.split(":", 1)[-1].strip()
+
+            q = q or (
+                lines[0].split(":", 1)[-1].strip() if ":" in lines[0] else lines[0]
+            )
+            a = a or (
+                lines[1].split(":", 1)[-1].strip() if ":" in lines[1] else lines[1]
+            )
+            d = d or (
+                lines[2].split(":", 1)[-1].strip() if ":" in lines[2] else lines[2]
+            )
+
+            return {"question": q, "answer": a, "difficulty": d}
+        except Exception:
+            return None
 
 
 class QAPipeline:
@@ -92,53 +232,9 @@ class QAPipeline:
             logger.info("Updated FAISS index with paraphrased documents")
 
     def _generate_qa(self, chunks, num_questions=2):
-        prompts, ids, contents = [], [], []
-        for i, chunk in enumerate(chunks):
-            content = chunk.page_content
-            prompt = (
-                f"You are a question generator. Generate {num_questions} questions based on the following text.\n"
-                "Rules:\n"
-                "1. Questions must be answerable using ONLY the information in the text\n"
-                "2. Answers must be directly stated in the text\n"
-                "3. Each question should test understanding of a different aspect of the text\n"
-                "4. Questions should be clear and specific\n"
-                "5. Answers should be concise and factual\n\n"
-                "For each QA pair, output exactly three lines with no extra commentary:\n"
-                "Line 1: Question: <your question>\n"
-                "Line 2: Answer: <the answer>\n"
-                "Line 3: Difficulty: <easy, medium, or hard>\n"
-                "Do not include any additional text.\n\n"
-                f"Text:\n{content}\n"
-            )
-            prompts.append(prompt)
-            ids.append(i + 1)
-            contents.append(content)
-
-        outputs = self.provider.batch_generate(prompts, max_tokens=1024)
-        final_questions = []
-        for idx, output in enumerate(outputs):
-            print(output)
-            for block in re.split(r"\n\s*\n", output.strip()):
-                lines = [l.strip() for l in block.splitlines() if l.strip()]
-                if len(lines) == 3:
-                    q = lines[0].split("Question:", 1)[-1].strip()
-                    a = lines[1].split("Answer:", 1)[-1].strip()
-                    d = lines[2].split("Difficulty:", 1)[-1].strip()
-                    if a.lower() in contents[idx].lower():
-                        final_questions.append(
-                            {
-                                "id": str(ids[idx]),
-                                "question": q,
-                                "answer": a,
-                                "supporting_paragraphs": [
-                                    p.strip()
-                                    for p in contents[idx].split("\n\n")
-                                    if p.strip()
-                                ],
-                            }
-                        )
-        logger.info(f"Generated {len(final_questions)} valid QA pairs")
-        return final_questions
+        qa_extractor = QAExtractor(provider=self.provider)
+        questions = qa_extractor.generate_qa(chunks, num_questions=2)
+        return questions
 
     def _save_questions(self, questions, path):
         with open(path, "w") as f:
