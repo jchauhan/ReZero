@@ -10,7 +10,8 @@ from langchain_community.vectorstores import FAISS
 
 from config import DATA_DIR, logger
 from src.embeddings import CustomHuggingFaceEmbeddings
-from src.providers.hf import UnslothProvider
+from src.providers.ollama import OllamaProvider
+from src.providers.openai import OpenAIProvider
 
 
 class QAPipeline:
@@ -116,7 +117,6 @@ class QAPipeline:
         outputs = self.provider.batch_generate(prompts, max_tokens=1024)
         final_questions = []
         for idx, output in enumerate(outputs):
-            print(output)
             for block in re.split(r"\n\s*\n", output.strip()):
                 lines = [l.strip() for l in block.splitlines() if l.strip()]
                 if len(lines) == 3:
@@ -160,10 +160,16 @@ if __name__ == "__main__":
         description="Run QA pipeline with optional parameters."
     )
     parser.add_argument(
+        "--provider",
+        type=str,
+        choices=["unsloth", "openai", "ollama"],
+        default="unsloth",
+        help="LLM provider to use",
+    )
+    parser.add_argument(
         "--model_name",
         type=str,
-        default="meta-llama/meta-Llama-3.1-8B-Instruct",
-        help="Model name to use",
+        help="Model name to use (optional; provider-specific default will be used if not provided)",
     )
     parser.add_argument(
         "--data_file",
@@ -172,11 +178,39 @@ if __name__ == "__main__":
         help="Path to the data file",
     )
     parser.add_argument(
-        "--num_questions", type=int, default=2, help="Number of questions to generate"
+        "--num_questions",
+        type=int,
+        default=2,
+        help="Number of questions to generate",
     )
 
     args = parser.parse_args()
 
-    QAPipeline(provider=UnslothProvider(model_name=args.model_name)).run(
-        args.data_file, num_questions=args.num_questions
-    )
+    # Default model names per provider
+    default_models = {
+        "unsloth": "meta-llama/meta-Llama-3.1-8B-Instruct",
+        "openai": "gpt-4o-mini",
+        "ollama": "llama2-uncensored:7b",
+    }
+
+    model_name = args.model_name or default_models[args.provider]
+
+    # Map provider string to actual provider class
+    if args.provider == "unsloth":
+        try:
+            from src.providers.hf import UnslothProvider
+
+            provider = UnslothProvider(model_name=model_name)
+        except NotImplementedError as e:
+            raise RuntimeError(
+                "Unsloth requires an NVIDIA GPU. Please use --provider openai or ollama for CPU support."
+            ) from e
+
+    elif args.provider == "openai":
+        provider = OpenAIProvider(model_name=model_name)
+    elif args.provider == "ollama":
+        provider = OllamaProvider(model_name=model_name)
+    else:
+        raise ValueError(f"Unsupported provider: {args.provider}")
+
+    QAPipeline(provider=provider).run(args.data_file, num_questions=args.num_questions)

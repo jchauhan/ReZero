@@ -1,5 +1,5 @@
 # providers/unsloth_provider.py
-from unsloth import FastLanguageModel
+import unsloth
 from vllm import SamplingParams
 
 from .base import LLMProvider
@@ -7,7 +7,7 @@ from .base import LLMProvider
 
 class UnslothProvider(LLMProvider):
     def __init__(self, model_name="meta-llama/meta-Llama-3.1-8B-Instruct"):
-        self.model, self.tokenizer = FastLanguageModel.from_pretrained(
+        self.model, self.tokenizer = unsloth.FastLanguageModel.from_pretrained(
             model_name=model_name,
             max_seq_length=4096,
             load_in_4bit=True,

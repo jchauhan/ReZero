@@ -29,10 +29,22 @@ GENERATOR_SERVER_PORT = 8002
 # Model configuration
 
 MODEL_NAME = "meta-llama/Llama-3.2-3B-Instruct"
-device_id = 1 if os.environ.get("CUDA_VISIBLE_DEVICES") == "1" else torch.cuda.current_device()
+
+try:
+    device_id = (
+        1
+        if os.environ.get("CUDA_VISIBLE_DEVICES") == "1"
+        else torch.cuda.current_device()
+    )
+except:
+    device_id = 0
+
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-OUTPUT_DIR = PROJ_ROOT / f"trainer_output_{MODEL_NAME.replace('/', '_')}_gpu{device_id}_{timestamp}"
+OUTPUT_DIR = (
+    PROJ_ROOT
+    / f"trainer_output_{MODEL_NAME.replace('/', '_')}_gpu{device_id}_{timestamp}"
+)
 
 # Model parameters
 MODEL_CONFIG = {
@@ -108,7 +120,9 @@ def _init_logging(env: str = "development") -> None:
         "- <level>{message}</level>"
     )
 
-    file_format = "{time:YYYY-MM-DD at HH:mm:ss} | {level} | {name}:{function}:{line} - {message}"
+    file_format = (
+        "{time:YYYY-MM-DD at HH:mm:ss} | {level} | {name}:{function}:{line} - {message}"
+    )
 
     # Add console logging with INFO level (minimal terminal output)
     logger.add(
@@ -139,7 +153,9 @@ def _init_logging(env: str = "development") -> None:
         if issubclass(exc_type, KeyboardInterrupt):
             sys.__excepthook__(exc_type, exc_value, exc_traceback)
             return
-        logger.opt(exception=(exc_type, exc_value, exc_traceback)).critical("Unhandled exception")
+        logger.opt(exception=(exc_type, exc_value, exc_traceback)).critical(
+            "Unhandled exception"
+        )
 
     sys.excepthook = exception_handler
 
@@ -161,7 +177,9 @@ def update_log_path(log_dir=None):
         log_dir = Path(log_dir)
         log_dir.mkdir(exist_ok=True, parents=True)
 
-    file_format = "{time:YYYY-MM-DD at HH:mm:ss} | {level} | {name}:{function}:{line} - {message}"
+    file_format = (
+        "{time:YYYY-MM-DD at HH:mm:ss} | {level} | {name}:{function}:{line} - {message}"
+    )
 
     # Add additional file handler pointing to training directory
     # No need to remove existing handlers as we want to keep those
@@ -241,7 +259,9 @@ def setup_logger(module_name=None, create_dirs: bool = False):
     Returns:
         Configured logger instance
     """
-    logger.warning("setup_logger is deprecated. Import logger directly from config instead.")
+    logger.warning(
+        "setup_logger is deprecated. Import logger directly from config instead."
+    )
     return logger
 
 

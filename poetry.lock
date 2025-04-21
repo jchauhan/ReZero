@@ -3548,6 +3548,22 @@ files = [
 tests = ["pytest", "pytest-cov"]
 
 [[package]]
+name = "ollama"
+version = "0.4.8"
+description = "The official Python client for Ollama."
+optional = false
+python-versions = "<4.0,>=3.8"
+groups = ["main"]
+files = [
+    {file = "ollama-0.4.8-py3-none-any.whl", hash = "sha256:04312af2c5e72449aaebac4a2776f52ef010877c554103419d3f36066fe8af4c"},
+    {file = "ollama-0.4.8.tar.gz", hash = "sha256:1121439d49b96fa8339842965d0616eba5deb9f8c790786cdf4c0b3df4833802"},
+]
+
+[package.dependencies]
+httpx = ">=0.27,<0.29"
+pydantic = ">=2.9.0,<3.0.0"
+
+[[package]]
 name = "openai"
 version = "1.75.0"
 description = "The official Python library for the openai API"
@@ -7941,4 +7957,4 @@ cffi = ["cffi (>=1.11)"]
 [metadata]
 lock-version = "2.1"
 python-versions = "~=3.11.0"
-content-hash = "f3a0ffb40950abc9a21b5e54fc1d9317f8d49eb6188f45192c1d4246bb3021c3"
+content-hash = "002498c624b72646274d276bf1a0b4a7719fe47859104a5d41f72648bb04d378"
