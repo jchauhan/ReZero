@@ -63,29 +63,53 @@ class QAExtractor:
         logger.info(f"Generated {len(final_questions)} valid QA pairs")
         return final_questions
 
-    def _generate_qa_prompts(self, chunks, num_questions):
+    def _generate_instruction_prompts(self, chunks):
         prompts, ids, contents = [], [], []
         for i, chunk in enumerate(chunks):
             content = chunk.page_content
             prompt = (
-                f"You are a question generator. Generate {num_questions} questions based on the following text.\n"
-                "Rules:\n"
-                "1. Questions must be answerable using ONLY the information in the text\n"
-                "2. Answers must be directly stated in the text\n"
-                "3. Each question should test understanding of a different aspect of the text\n"
-                "4. Questions should be clear and specific\n"
-                "5. Answers should be concise and factual\n\n"
-                "For each QA pair, output exactly three lines with no extra commentary:\n"
-                "Line 1: Question: <your question>\n"
-                "Line 2: Answer: <the answer>\n"
-                "Line 3: Difficulty: <easy, medium, or hard>\n"
-                "Do not include any additional text.\n\n"
-                f"Text:\n{content}\n"
+                "You are an instruction generator. Given the following text, generate ONE prompt (instruction or question) "
+                "that could be used to explore or learn more about the topic.\n\n"
+                "Guidelines:\n"
+                "1. The prompt should be clear and concise.\n"
+                "2. It should be relevant to the topic in the text.\n"
+                "3. Do NOT answer the prompt.\n"
+                "4. Use the following format exactly (three lines):\n"
+                "   Line 1: Question: <the generated prompt>\n"
+                "   Line 2: Answer: your answer\n"
+                "   Line 3: Difficulty: <easy, medium, or hard>\n"
+                "Do not include any other commentary or text.\n\n"
+                "Text:\n"
+                f"{content}\n"
             )
             prompts.append(prompt)
             ids.append(i + 1)
             contents.append(content)
         return prompts, ids, contents
+
+    # def _generate_qa_prompts(self, chunks, num_questions):
+    #     prompts, ids, contents = [], [], []
+    #     for i, chunk in enumerate(chunks):
+    #         content = chunk.page_content
+    #         prompt = (
+    #             f"You are a question generator. Generate {num_questions} questions based on the following text.\n"
+    #             "Rules:\n"
+    #             "1. Questions must be answerable using ONLY the information in the text\n"
+    #             "2. Answers must be directly stated in the text\n"
+    #             "3. Each question should test understanding of a different aspect of the text\n"
+    #             "4. Questions should be clear and specific\n"
+    #             "5. Answers should be concise and factual\n\n"
+    #             "For each QA pair, output exactly three lines with no extra commentary:\n"
+    #             "Line 1: Question: <your question>\n"
+    #             "Line 2: Answer: <the answer>\n"
+    #             "Line 3: Difficulty: <easy, medium, or hard>\n"
+    #             "Do not include any additional text.\n\n"
+    #             f"Text:\n{content}\n"
+    #         )
+    #         prompts.append(prompt)
+    #         ids.append(i + 1)
+    #         contents.append(content)
+    #     return prompts, ids, contents
 
     def _parse_outputs(self, outputs, ids, contents, num_questions, is_retry=False):
         results = [None] * len(outputs)
