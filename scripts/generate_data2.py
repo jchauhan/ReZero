@@ -22,9 +22,46 @@ class QAExtractor:
     def generate_qa(self, chunks, num_questions=2):
         prompts, ids, contents = self._generate_qa_prompts(chunks, num_questions)
         outputs = self.provider.batch_generate(prompts, max_tokens=1024)
-        questions = self._parse_outputs(outputs, ids, contents)
-        logger.info(f"Generated {len(questions)} valid QA pairs")
-        return questions
+
+        results = self._parse_outputs(outputs, ids, contents, num_questions)
+
+        # Retry failed prompts
+        retry_indices = [i for i, r in enumerate(results) if r is None]
+        if retry_indices:
+            logger.info(f"Retrying {len(retry_indices)} failed prompt(s)...")
+            retry_prompts = [prompts[i] for i in retry_indices]
+            retry_outputs = self.provider.batch_generate(retry_prompts, max_tokens=1024)
+
+            for j, idx in enumerate(retry_indices):
+                retry_parsed = self._parse_outputs(
+                    [retry_outputs[j]],
+                    [ids[idx]],
+                    [contents[idx]],
+                    num_questions,
+                    is_retry=True,
+                )
+                results[idx] = retry_parsed[0]
+
+        # Compile final QA list
+        final_questions = []
+        for i, qa_list in enumerate(results):
+            if qa_list:
+                for qa in qa_list:
+                    final_questions.append(
+                        {
+                            "id": str(ids[i]),
+                            "question": qa["question"],
+                            "answer": qa["answer"],
+                            "difficulty": qa["difficulty"],
+                            "supporting_paragraphs": [
+                                p.strip()
+                                for p in contents[i].split("\n\n")
+                                if p.strip()
+                            ],
+                        }
+                    )
+        logger.info(f"Generated {len(final_questions)} valid QA pairs")
+        return final_questions
 
     def _generate_qa_prompts(self, chunks, num_questions):
         prompts, ids, contents = [], [], []
@@ -46,35 +83,25 @@ class QAExtractor:
                 f"Text:\n{content}\n"
             )
             prompts.append(prompt)
-            print(prompt)
             ids.append(i + 1)
             contents.append(content)
         return prompts, ids, contents
 
-    def _parse_outputs(self, outputs, ids, contents):
-        final_questions = []
+    def _parse_outputs(self, outputs, ids, contents, num_questions, is_retry=False):
+        results = [None] * len(outputs)
         for idx, output in enumerate(outputs):
-            print(output)
             parsed = self._parse_qa_output(output)
-            if not parsed:
-                logger.warning("Falling back to imperfect parser.")
+            if not parsed or len(parsed) < num_questions:
+                logger.warning(
+                    f"{'Retry' if is_retry else 'Initial'} parse failed for chunk {ids[idx]}"
+                )
                 parsed = self._parse_imperfect_qa_output(output)
 
-            for qa in parsed:
-                if qa["answer"].lower() in contents[idx].lower():
-                    final_questions.append(
-                        {
-                            "id": str(ids[idx]),
-                            "question": qa["question"],
-                            "answer": qa["answer"],
-                            "supporting_paragraphs": [
-                                p.strip()
-                                for p in contents[idx].split("\n\n")
-                                if p.strip()
-                            ],
-                        }
-                    )
-        return final_questions
+            if parsed and len(parsed) >= num_questions:
+                results[idx] = parsed[:num_questions]
+            else:
+                results[idx] = None
+        return results
 
     def _parse_qa_output(self, text):
         qa_blocks = []
