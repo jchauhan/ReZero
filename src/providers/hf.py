@@ -1,47 +1,58 @@
-# providers/unsloth_provider.py
-import unsloth
-from vllm import SamplingParams
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    pipeline,
+)
 
 from .base import LLMProvider
 
 
-class UnslothProvider(LLMProvider):
-    def __init__(self, model_name="meta-llama/meta-Llama-3.1-8B-Instruct"):
-        self.model, self.tokenizer = unsloth.FastLanguageModel.from_pretrained(
-            model_name=model_name,
-            max_seq_length=4096,
-            load_in_4bit=True,
-            fast_inference=True,
-            gpu_memory_utilization=0.6,
+class HuggingFaceProvider(LLMProvider):
+    def __init__(
+        self,
+        model_name="georgesung/llama3_8b_chat_uncensored",
+        temperature=0.7,
+        max_tokens=4288,
+        use_8bit=True,
+    ):
+        self.model_name = model_name
+        self.temperature = temperature
+        self.max_tokens = max_tokens
+
+        quant_config = BitsAndBytesConfig(load_in_8bit=True) if use_8bit else None
+
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            device_map="auto",
+            quantization_config=quant_config,
         )
-        self.default_sampling = SamplingParams(
-            temperature=0.3,
+        self.pipeline = pipeline(
+            "text-generation",
+            model=self.model,
+            tokenizer=self.tokenizer,
+            max_length=self.max_tokens,
+            temperature=self.temperature,
             top_p=0.95,
-            max_tokens=512,
+            repetition_penalty=1.15,
         )
 
     def format_prompt(self, text: str) -> str:
-        return self.tokenizer.apply_chat_template(
-            [{"role": "user", "content": text}],
-            tokenize=False,
-            add_generation_prompt=True,
-        )
+        return f"### HUMAN:\n{text}\n\n### RESPONSE:\n"
 
-    def generate(self, prompt: str, max_tokens: int = 512) -> str:
-        params = self.default_sampling
-        params.max_tokens = max_tokens
-        formatted = self.format_prompt(prompt)
-        return (
-            self.model.fast_generate([formatted], sampling_params=params)[0]
-            .outputs[0]
-            .text
-        )
+    def generate(self, prompt: str, max_tokens: int = None) -> str:
+        max_tokens = max_tokens or self.max_tokens
+        output = self.pipeline(self.format_prompt(prompt), max_length=max_tokens)
+        text = output[0]["generated_text"]
+        return self._extract_response(text)
 
-    def batch_generate(self, prompts: list, max_tokens: int = 512) -> list:
-        params = self.default_sampling
-        params.max_tokens = max_tokens
-        formatted = [self.format_prompt(p) for p in prompts]
-        return [
-            output.outputs[0].text
-            for output in self.model.fast_generate(formatted, sampling_params=params)
-        ]
+    def batch_generate(self, prompts: list, max_tokens: int = None) -> list:
+        return [self.generate(p, max_tokens=max_tokens) for p in prompts]
+
+    def _extract_response(self, text):
+        # Extract text after "### RESPONSE:"
+        split_key = "### RESPONSE:"
+        if split_key in text:
+            return text.split(split_key)[-1].strip()
+        return text.strip()

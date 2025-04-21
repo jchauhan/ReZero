@@ -162,7 +162,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--provider",
         type=str,
-        choices=["unsloth", "openai", "ollama"],
+        choices=["unsloth", "openai", "ollama", "hf"],
         default="unsloth",
         help="LLM provider to use",
     )
@@ -183,33 +183,53 @@ if __name__ == "__main__":
         default=2,
         help="Number of questions to generate",
     )
+    parser.add_argument(
+        "--use_8bit",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Whether to load model in 8-bit (only applies to hf provider)",
+    )
 
     args = parser.parse_args()
 
-    # Default model names per provider
     default_models = {
         "unsloth": "meta-llama/meta-Llama-3.1-8B-Instruct",
         "openai": "gpt-4o-mini",
         "ollama": "llama2-uncensored:7b",
+        "hf": "georgesung/llama3_8b_chat_uncensored",
     }
 
     model_name = args.model_name or default_models[args.provider]
 
-    # Map provider string to actual provider class
     if args.provider == "unsloth":
         try:
-            from src.providers.hf import UnslothProvider
+            from src.providers.unsloth import UnslothProvider
 
             provider = UnslothProvider(model_name=model_name)
         except NotImplementedError as e:
             raise RuntimeError(
-                "Unsloth requires an NVIDIA GPU. Please use --provider openai or ollama for CPU support."
+                "Unsloth requires an NVIDIA GPU. Use --provider openai, ollama, or hf for CPU support."
             ) from e
 
     elif args.provider == "openai":
         provider = OpenAIProvider(model_name=model_name)
+
     elif args.provider == "ollama":
         provider = OllamaProvider(model_name=model_name)
+
+    elif args.provider == "hf":
+        try:
+            from src.providers.hf import HuggingFaceProvider
+
+            provider = HuggingFaceProvider(
+                model_name=model_name,
+                use_8bit=args.use_8bit,
+            )
+        except Exception as e:
+            raise RuntimeError(
+                "Failed to load Hugging Face model. Check model ID and environment."
+            ) from e
+
     else:
         raise ValueError(f"Unsupported provider: {args.provider}")
 

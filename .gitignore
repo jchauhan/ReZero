@@ -16,7 +16,6 @@ eval_logs/
 downloaded_model/
 logs/
 *.code-workspace
-data/
 .gradio/
 output*
 llama.cpp*
