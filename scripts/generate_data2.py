@@ -116,6 +116,7 @@ class QAPipeline:
         outputs = self.provider.batch_generate(prompts, max_tokens=1024)
         final_questions = []
         for idx, output in enumerate(outputs):
+            print(output)
             for block in re.split(r"\n\s*\n", output.strip()):
                 lines = [l.strip() for l in block.splitlines() if l.strip()]
                 if len(lines) == 3:
