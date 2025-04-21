@@ -90,6 +90,7 @@ class QAExtractor:
     def _parse_outputs(self, outputs, ids, contents, num_questions, is_retry=False):
         results = [None] * len(outputs)
         for idx, output in enumerate(outputs):
+            output = self._remove_think_tags(output)
             parsed = self._parse_qa_output(output)
             if not parsed or len(parsed) < num_questions:
                 logger.warning(
@@ -181,6 +182,10 @@ class QAExtractor:
             return {"question": q, "answer": a, "difficulty": d}
         except Exception:
             return None
+
+    def _remove_think_tags(self, text: str) -> str:
+        """Removes all <think>...</think> sections (reasoning traces) from text."""
+        return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL | re.IGNORECASE)
 
 
 class QAPipeline:
